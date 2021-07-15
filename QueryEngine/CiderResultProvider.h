@@ -22,8 +22,8 @@ class CiderResultProvider {
  public:
   CiderResultProvider() : crt_row_idx_(0) {}
 
-  const std::shared_ptr<ResultSet>& getRows() const { 
-      return rows_; 
+  const std::shared_ptr<ResultSet>& getRows() const {
+      return rows_;
   }
 
   std::vector<TargetValue> getNextRow(const bool translate_strings,
@@ -66,6 +66,8 @@ class CiderResultProvider {
   virtual std::any convert() {
     return nullptr;
   }
+
+  virtual void release() {}
 
   std::shared_ptr<ExecutionResult> result_;
   std::shared_ptr<ResultSet> rows_;

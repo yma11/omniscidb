@@ -77,7 +77,7 @@ CiderEntry::~CiderEntry() {
 }
 
 int CiderEntry::run_query(std::shared_ptr<BufferCiderDataProvider> dp,
-                          std::shared_ptr<CiderArrowResultProvider> rp) {
+                          std::shared_ptr<CiderResultProvider> rp) {
   auto res_itr = QR::get()->ciderExecute(query_info_,
                                          ExecutorDeviceType::CPU,
                                          /*hoist_literals=*/true,
@@ -85,9 +85,6 @@ int CiderEntry::run_query(std::shared_ptr<BufferCiderDataProvider> dp,
                                          /*just_explain=*/false,
                                          dp,
                                          rp);
-  auto res = res_itr->next(/* dummy size = */ 100);
-  auto crt_row = res->getRows()->getNextRow(true, true);
-  std::shared_ptr<arrow::RecordBatch> record_batch =
-      std::any_cast<std::shared_ptr<arrow::RecordBatch>>(rp->convert());
-  return crt_row.size();
+  auto res = res_itr->next(/* dummy size = */dp->getNumRows());
+  return rp->getRows()->rowCount();
 }

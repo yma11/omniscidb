@@ -2,7 +2,7 @@
 #define CIDER_ENTRY_H
 
 #include <string>
-#include "QueryEngine/CiderArrowResultProvider.h"
+#include "QueryEngine/CiderResultProvider.h"
 #include "QueryRunner/QueryRunner.h"
 
 class CiderEntry {
@@ -18,7 +18,7 @@ class CiderEntry {
 
   // return result row size.
   int run_query(std::shared_ptr<BufferCiderDataProvider> dp,
-                std::shared_ptr<CiderArrowResultProvider> rp);
+                std::shared_ptr<CiderResultProvider> rp);
 
   ~CiderEntry();
 
