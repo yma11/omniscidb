@@ -17,13 +17,99 @@
 #include "com_mapd_CiderJNI.h"
 #include <stdio.h>
 #include <string.h>
+#include <random>
 
-#include "QueryEngine/CiderResultProvider.h"
+#include "Logger/Logger.h"
+#include "QueryEngine/CiderArrowResultProvider.h"
 #include "QueryEngine/CiderPrestoResultProvider.h"
+#include "QueryEngine/CiderResultProvider.h"
 #include "QueryEngine/Descriptors/RelAlgExecutionDescriptor.h"
 #include "QueryRunner/CiderEntry.h"
 #include "QueryRunner/QueryRunner.h"
 
+#include "Embedded/DBEngine.h"
+
+#include <arrow/api.h>
+#include "Shared/ArrowUtil.h"
+
+namespace util {
+
+std::string random_string(std::size_t length) {
+  const std::string CHARACTERS =
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+  std::random_device random_device;
+  std::mt19937 generator(random_device());
+  std::uniform_int_distribution<> distribution(0, CHARACTERS.size() - 1);
+
+  std::string random_string;
+
+  for (std::size_t i = 0; i < length; ++i) {
+    random_string += CHARACTERS[distribution(generator)];
+  }
+
+  return random_string;
+}
+
+std::shared_ptr<arrow::Schema> parse_to_schema(std::string json_schema) {
+  std::vector<std::shared_ptr<arrow::Field>> fields;
+  rapidjson::Document d;
+  if (d.Parse(json_schema).HasParseError() || !d.HasMember("Columns")) {
+    LOG(ERROR) << "invalid json for schema!";
+  }
+  const rapidjson::Value& columns = d["Columns"];
+  std::string schema;
+  for (rapidjson::Value::ConstValueIterator v_iter = columns.Begin();
+       v_iter != columns.End();
+       ++v_iter) {
+    const rapidjson::Value& field = *v_iter;
+    for (rapidjson::Value::ConstMemberIterator m_iter = field.MemberBegin();
+         m_iter != field.MemberEnd();
+         ++m_iter) {
+      const char* col_name = m_iter->name.GetString();
+      const char* col_type = m_iter->value.GetString();
+      std::string col_type_str(col_type);
+      std::shared_ptr<arrow::DataType> type;
+      if (col_type_str.compare("int") == 0)
+        type = arrow::int32();
+      else if (col_type_str.compare("long") == 0)
+        type = arrow::int64();
+      else if (col_type_str.compare("float") == 0)
+        type = arrow::float32();
+      else if (col_type_str.compare("double") == 0)
+        type = arrow::float64();
+      else
+        LOG(WARNING) << "unsupported type: " << col_type_str;
+
+      auto f = std::make_shared<arrow::Field>(std::string(col_name), type);
+      fields.push_back(f);
+    }
+  }
+  std::shared_ptr<arrow::Schema> s = std::make_shared<arrow::Schema>(fields);
+
+  return s;
+}
+
+void convertToArrowTable(std::shared_ptr<arrow::Table> table,
+                         int64_t* dataBuffers,
+                         int64_t* nullBuffers,
+                         std::string schema,
+                         int rowCount) {
+  // todo:: null buffer???
+  auto s = parse_to_schema(schema);
+  std::vector<std::shared_ptr<arrow::Array>> arrays;
+  for (int i = 0; i < s->fields().size(); i++) {
+    auto buffer = std::make_shared<arrow::Buffer>((uint8_t*)(dataBuffers + i), rowCount);
+    auto data = arrow::ArrayData::Make(s->fields()[i]->type(), rowCount, {buffer});
+    auto array = arrow::MakeArray(data);
+    arrays.push_back(array);
+  }
+
+  table = arrow::Table::Make(s, arrays, rowCount);
+  return;
+}
+
+}  // namespace util
 /*
  * Class:     com_mapd_CiderJNI
  * Method:    processBlocks
@@ -38,24 +124,13 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
                                                             jlongArray resultValues,
                                                             jlongArray resultNulls,
                                                             jint rowCount) {
-  // new a CiderEntry
-  CiderEntry* ciderEntry = new CiderEntry();
-  int64_t ciderEntryPtr = reinterpret_cast<int64_t>(ciderEntry);
-  // return ciderEntryPtr;
+  logger::LogOptions log_options("");
+  log_options.severity_ = logger::Severity::DEBUG4;
+  log_options.severity_clog_ = logger::Severity::DEBUG4;
+  logger::init(log_options);
 
-  // build table based on schema.
-  const char* schemaPtr = env->GetStringUTFChars(schema, nullptr);
-  std::string tableSchema(schemaPtr);
-  std::string tableName("tmp_table");
-  ciderEntry->build_table(tableName, tableSchema);
-  env->ReleaseStringUTFChars(schema, schemaPtr);
-
-  // set query info
-  const char* sqlPtr = env->GetStringUTFChars(sql, nullptr);
-  std::string queryInfo = "execute relalg " + std::string(sqlPtr);
-  ciderEntry->set_query_info(queryInfo);
-  env->ReleaseStringUTFChars(schema, schemaPtr);
-  env->ReleaseStringUTFChars(sql, sqlPtr);
+  std::string opt_str = "/tmp/" + util::random_string(10) + "--calcite-port 5555";
+  auto dbe = EmbeddedDatabase::DBEngine::create(opt_str);
 
   jsize dataValuesLen = env->GetArrayLength(dataValues);
   jsize dataNullsLen = env->GetArrayLength(dataNulls);
@@ -69,31 +144,62 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   jlong* resultValuesPtr = env->GetLongArrayElements(resultValues, 0);
   jlong* resultNullsPtr = env->GetLongArrayElements(resultNulls, 0);
 
-  printf("processing within JNI...\n");
-  std::vector<int8_t*> dataBuffers;
-  for (int i = 0; i < dataValuesLen; i++) {
-    dataBuffers.push_back((int8_t*)(dataValuesPtr[i]));
+  std::shared_ptr<arrow::Table> arrowTable;
+  const char* schemaPtr = env->GetStringUTFChars(schema, nullptr);
+  std::string tableSchema(schemaPtr);
+  util::convertToArrowTable(arrowTable, dataValuesPtr, dataNullsPtr, schemaPtr, rowCount);
+  dbe->importArrowTable("test", arrowTable);
+
+  const char* sqlPtr = env->GetStringUTFChars(sql, nullptr);
+  std::string queryInfo = "execute relalg " + std::string(sqlPtr);
+  auto res = dbe->executeRA(queryInfo);
+
+  /*
+  {
+    // new a CiderEntry
+    CiderEntry* ciderEntry = new CiderEntry();
+    int64_t ciderEntryPtr = reinterpret_cast<int64_t>(ciderEntry);
+    // return ciderEntryPtr;
+
+    // build table based on schema.
+
+    std::string tableName("tmp_table");
+    ciderEntry->build_table(tableName, tableSchema);
+    env->ReleaseStringUTFChars(schema, schemaPtr);
+
+    // set query info
+
+    ciderEntry->set_query_info(queryInfo);
+    env->ReleaseStringUTFChars(schema, schemaPtr);
+    env->ReleaseStringUTFChars(sql, sqlPtr);
+
+    printf("processing within JNI...\n");
+    std::vector<int8_t*> dataBuffers;
+    for (int i = 0; i < dataValuesLen; i++) {
+      dataBuffers.push_back((int8_t*)(dataValuesPtr[i]));
+    }
+    // TODO: convert NULL values.
+
+    auto dp =
+        std::make_shared<BufferCiderDataProvider>(dataValuesLen, 0, dataBuffers,
+  rowCount); auto rp = std::make_shared<CiderPrestoResultProvider>(); int ret =
+  ciderEntry->run_query(dp, rp); std::vector<PrestoResult> result =
+        std::any_cast<std::vector<PrestoResult>>(rp->convert());
+    CHECK(resultValuesLen == result.size());
+    for (int i = 0; i < resultValuesLen; i++) {
+      int8_t* valueSrc = result[i].valueBuffer;
+      int8_t* valueDst = (int8_t*)resultValuesPtr[i];
+      int valueBufferLength = result[i].valueBufferLength;
+      memcpy(valueDst, valueSrc, valueBufferLength);
+      int8_t* nullSrc = result[i].nullBuffer;
+      int8_t* nullDst = (int8_t*)resultNullsPtr[i];
+      int nullBufferLength = result[i].nullBufferLength;
+      memcpy(nullDst, nullSrc, nullBufferLength);
+    }
+
+    rp->release();
+
+    return ret;
   }
-  // TODO: convert NULL values.
-
-  auto dp =
-      std::make_shared<BufferCiderDataProvider>(dataValuesLen, 0, dataBuffers, rowCount);
-  auto rp = std::make_shared<CiderPrestoResultProvider>();
-  int ret = ciderEntry->run_query(dp, rp);
-  std::vector<PrestoResult> result = std::any_cast<std::vector<PrestoResult>>(rp->convert());
-  CHECK(resultValuesLen == result.size());
-  for (int i = 0; i < resultValuesLen; i++) {
-    int8_t* valueSrc = result[i].valueBuffer;
-    int8_t* valueDst = (int8_t*)resultValuesPtr[i];
-    int valueBufferLength = result[i].valueBufferLength;
-    memcpy(valueDst, valueSrc, valueBufferLength);
-    int8_t* nullSrc = result[i].nullBuffer;
-    int8_t* nullDst = (int8_t*)resultNullsPtr[i];
-    int nullBufferLength = result[i].nullBufferLength;
-    memcpy(nullDst, nullSrc, nullBufferLength);
-  }
-
-  rp->release();
-
-  return ret;
+  */
 }
