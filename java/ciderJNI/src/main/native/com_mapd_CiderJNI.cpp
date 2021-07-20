@@ -176,54 +176,25 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   auto res = dbe->executeRA(queryInfo);
 
   int count = res->getRowCount();
-  return count;
 
-  /*
-  {
-    // new a CiderEntry
-    CiderEntry* ciderEntry = new CiderEntry();
-    int64_t ciderEntryPtr = reinterpret_cast<int64_t>(ciderEntry);
-    // return ciderEntryPtr;
-
-    // build table based on schema.
-
-    std::string tableName("tmp_table");
-    ciderEntry->build_table(tableName, tableSchema);
-    env->ReleaseStringUTFChars(schema, schemaPtr);
-
-    // set query info
-
-    ciderEntry->set_query_info(queryInfo);
-    env->ReleaseStringUTFChars(schema, schemaPtr);
-    env->ReleaseStringUTFChars(sql, sqlPtr);
-
-    printf("processing within JNI...\n");
-    std::vector<int8_t*> dataBuffers;
-    for (int i = 0; i < dataValuesLen; i++) {
-      dataBuffers.push_back((int8_t*)(dataValuesPtr[i]));
-    }
-    // TODO: convert NULL values.
-
-    auto dp =
-        std::make_shared<BufferCiderDataProvider>(dataValuesLen, 0, dataBuffers,
-  rowCount); auto rp = std::make_shared<CiderPrestoResultProvider>(); int ret =
-  ciderEntry->run_query(dp, rp); std::vector<PrestoResult> result =
-        std::any_cast<std::vector<PrestoResult>>(rp->convert());
-    CHECK(resultValuesLen == result.size());
-    for (int i = 0; i < resultValuesLen; i++) {
-      int8_t* valueSrc = result[i].valueBuffer;
-      int8_t* valueDst = (int8_t*)resultValuesPtr[i];
-      int valueBufferLength = result[i].valueBufferLength;
-      memcpy(valueDst, valueSrc, valueBufferLength);
-      int8_t* nullSrc = result[i].nullBuffer;
-      int8_t* nullDst = (int8_t*)resultNullsPtr[i];
-      int nullBufferLength = result[i].nullBufferLength;
-      memcpy(nullDst, nullSrc, nullBufferLength);
-    }
-
-    rp->release();
-
-    return ret;
+  // converting result
+  auto rp = std::make_shared<CiderPrestoResultProvider>();
+  rp->registerResultSet(res->getResultSet());
+  std::vector<PrestoResult> result =
+      std::any_cast<std::vector<PrestoResult>>(rp->convert());
+  CHECK(resultValuesLen == result.size());
+  for (int i = 0; i < resultValuesLen; i++) {
+    int8_t* valueSrc = result[i].valueBuffer;
+    int8_t* valueDst = (int8_t*)resultValuesPtr[i];
+    int valueBufferLength = result[i].valueBufferLength;
+    memcpy(valueDst, valueSrc, valueBufferLength);
+    int8_t* nullSrc = result[i].nullBuffer;
+    int8_t* nullDst = (int8_t*)resultNullsPtr[i];
+    int nullBufferLength = result[i].nullBufferLength;
+    memcpy(nullDst, nullSrc, nullBufferLength);
   }
-  */
+
+  rp->release();
+
+  return count;
 }
