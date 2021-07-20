@@ -86,6 +86,14 @@ class CursorImpl : public Cursor {
     return nullptr;
   }
 
+  std::shared_ptr<ResultSet> getResultSet() {
+    if (result_set_) {
+      return result_set_;
+    } else {
+      return nullptr;
+    }
+  }
+
  private:
   std::shared_ptr<ResultSet> result_set_;
   std::vector<std::string> col_names_;
@@ -538,5 +546,10 @@ ColumnType Cursor::getColType(uint32_t col_num) {
 std::shared_ptr<arrow::RecordBatch> Cursor::getArrowRecordBatch() {
   CursorImpl* cursor = getImpl(this);
   return cursor->getArrowRecordBatch();
+}
+
+std::shared_ptr<ResultSet> Cursor::getResultSet() {
+  CursorImpl* cursor = getImpl(this);
+  return cursor->getResultSet();
 }
 }  // namespace EmbeddedDatabase

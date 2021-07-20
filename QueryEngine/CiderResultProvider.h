@@ -56,6 +56,13 @@ class CiderResultProvider {
     return required_rows;
   }
 
+  bool registerResultSet(std::shared_ptr<ResultSet> result) {
+    result_ = nullptr;
+    rows_ = result;
+    crt_row_idx_ = 0;
+    return true;
+  }
+
   bool registerExecutionResult(std::shared_ptr<ExecutionResult> result) {
     result_ = result;
     rows_ = result->getRows();
@@ -69,7 +76,7 @@ class CiderResultProvider {
 
   virtual void release() {}
 
-  std::shared_ptr<ExecutionResult> result_;
+  std::shared_ptr<ExecutionResult> result_; //FIXME : do we need this??
   std::shared_ptr<ResultSet> rows_;
   mutable size_t crt_row_idx_;
 };
