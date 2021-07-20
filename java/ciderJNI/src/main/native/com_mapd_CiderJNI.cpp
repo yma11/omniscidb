@@ -130,6 +130,41 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
 }
 
 }  // namespace util
+
+/*
+ * Class:     com_mapd_CiderJNI
+ * Method:    init
+ * Signature: ()J
+ */
+JNIEXPORT jlong JNICALL Java_com_mapd_CiderJNI_init(JNIEnv* env, jclass cls) {
+  logger::LogOptions log_options("");
+  log_options.severity_ = logger::Severity::DEBUG4;
+  log_options.severity_clog_ = logger::Severity::DEBUG4;
+  logger::init(log_options);
+
+  std::string opt_str = "/tmp/" + util::random_string(10) + " --calcite-port 5555";
+  // todo: this is a shared_ptr, will it dispose?
+  std::shared_ptr<EmbeddedDatabase::DBEngine>* pDbe =
+      new std::shared_ptr<EmbeddedDatabase::DBEngine>;
+  *pDbe = EmbeddedDatabase::DBEngine::create(opt_str);
+
+  return reinterpret_cast<jlong>(pDbe);
+}
+
+/*
+ * Class:     com_mapd_CiderJNI
+ * Method:    close
+ * Signature: (J)V
+ */
+JNIEXPORT void JNICALL Java_com_mapd_CiderJNI_close(JNIEnv* env,
+                                                    jclass cls,
+                                                    jlong dbePtr) {
+  std::shared_ptr<EmbeddedDatabase::DBEngine>* pDbe =
+      reinterpret_cast<std::shared_ptr<EmbeddedDatabase::DBEngine>*>(dbePtr);
+  (*pDbe).reset();
+  delete pDbe;
+}
+
 /*
  * Class:     com_mapd_CiderJNI
  * Method:    processBlocks
@@ -137,6 +172,7 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
  */
 JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
                                                             jclass cls,
+                                                            jlong dbePtr,
                                                             jstring sql,
                                                             jstring schema,
                                                             jlongArray dataValues,
@@ -144,13 +180,11 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
                                                             jlongArray resultValues,
                                                             jlongArray resultNulls,
                                                             jint rowCount) {
-  logger::LogOptions log_options("");
-  log_options.severity_ = logger::Severity::DEBUG4;
-  log_options.severity_clog_ = logger::Severity::DEBUG4;
-  logger::init(log_options);
-
-  std::string opt_str = "/tmp/" + util::random_string(10) + " --calcite-port 5555";
-  auto dbe = EmbeddedDatabase::DBEngine::create(opt_str);
+  if (dbePtr == 0) {
+    LOG(FATAL) << "ERROR: NULLPTR ";
+  }
+  std::shared_ptr<EmbeddedDatabase::DBEngine>* pDbe =
+      reinterpret_cast<std::shared_ptr<EmbeddedDatabase::DBEngine>*>(dbePtr);
 
   jsize dataValuesLen = env->GetArrayLength(dataValues);
   jsize dataNullsLen = env->GetArrayLength(dataNulls);
@@ -168,12 +202,12 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   const char* schemaPtr = env->GetStringUTFChars(schema, nullptr);
   std::string tableSchema(schemaPtr);
   util::convertToArrowTable(arrowTable, dataValuesPtr, dataNullsPtr, schemaPtr, rowCount);
-  dbe->importArrowTable("test", arrowTable);
+  (*pDbe)->importArrowTable("test", arrowTable);
 
   const char* sqlPtr = env->GetStringUTFChars(sql, nullptr);
   // std::string queryInfo = "execute relalg " + std::string(sqlPtr);
   std::string queryInfo = std::string(sqlPtr);
-  auto res = dbe->executeRA(queryInfo);
+  auto res = (*pDbe)->executeRA(queryInfo);
 
   int count = res->getRowCount();
 
