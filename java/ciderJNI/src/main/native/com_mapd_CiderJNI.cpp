@@ -68,7 +68,7 @@ std::pair<std::shared_ptr<arrow::Schema>, std::string> parse_to_schema(
     LOG(ERROR) << "invalid json for schema!";
   }
   table_name = d["Table"].GetString();
-  const rapidjson::Value& columns = d["Columns"];
+  const rapidjson::Value& columns = d["columns"];
   std::string schema;
   for (rapidjson::Value::ConstValueIterator v_iter = columns.Begin();
        v_iter != columns.End();
@@ -81,13 +81,13 @@ std::pair<std::shared_ptr<arrow::Schema>, std::string> parse_to_schema(
       const char* col_type = m_iter->value.GetString();
       std::string col_type_str(col_type);
       std::shared_ptr<arrow::DataType> type;
-      if (col_type_str.compare("int") == 0)
+      if (col_type_str.compare("INT") == 0)
         type = arrow::int32();
-      else if (col_type_str.compare("long") == 0)
+      else if (col_type_str.compare("LONG") == 0)
         type = arrow::int64();
-      else if (col_type_str.compare("float") == 0)
+      else if (col_type_str.compare("FLOAT") == 0)
         type = arrow::float32();
-      else if (col_type_str.compare("double") == 0)
+      else if (col_type_str.compare("DOUBLE") == 0)
         type = arrow::float64();
       else
         LOG(WARNING) << "unsupported type: " << col_type_str;
@@ -113,22 +113,40 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
   table_name = table_name_;
   std::vector<std::shared_ptr<arrow::Array>> arrays;
   for (int i = 0; i < s->fields().size(); i++) {
-    LOG(INFO) << "convert " << i << " type: " << s->fields()[i]->name();
+    LOG(INFO) << "convert " << i << " name: " << s->fields()[i]->name();
+    arrow::Type::type dataType = s->fields()[i]->type()->id();
+    int length = 0;
+    switch (dataType) {
+      case arrow::Type::INT32:
+      case arrow::Type::FLOAT:
+        length = 4;
+        break;
+      case arrow::Type::INT64:
+      case arrow::Type::DOUBLE:
+        length = 8;
+        break;
+      default:
+        LOG(FATAL) << "Unsupported type";
+        break;
+    }
 
     auto dataBuffer =
-        std::make_shared<arrow::Buffer>((uint8_t*)(dataBuffers + i), rowCount);
+        std::make_shared<arrow::Buffer>((uint8_t*)(dataBuffers[i]), rowCount * length);
     auto nullBuffer =
-        std::make_shared<arrow::Buffer>((uint8_t*)(nullBuffers + i), rowCount);
-    LOG(INFO) << "1111111 ";
+        std::make_shared<arrow::Buffer>((uint8_t*)(nullBuffers[i]), rowCount);
+    long ptr = (long)(dataBuffers[i]);
 
     std::shared_ptr<arrow::Array> array;
-    if (s->fields()[i]->type()->id() == arrow::Type::INT32) {
+    if (dataType == arrow::Type::INT32) {
       array = std::make_shared<arrow::Int32Array>(rowCount, dataBuffer, nullBuffer);
-    } else if (s->fields()[i]->type()->id() == arrow::Type::INT64) {
+      for (int j = 0; j < rowCount; j++) {
+        // LOG(INFO) << "data: " << *((int32_t*)ptr + j);
+      }
+    } else if (dataType == arrow::Type::INT64) {
       array = std::make_shared<arrow::Int64Array>(rowCount, dataBuffer, nullBuffer);
-    } else if (s->fields()[i]->type()->id() == arrow::Type::FLOAT) {
+    } else if (dataType == arrow::Type::FLOAT) {
       array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer, nullBuffer);
-    } else if (s->fields()[i]->type()->id() == arrow::Type::DOUBLE) {
+    } else if (dataType == arrow::Type::DOUBLE) {
       array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer, nullBuffer);
     } else {
       LOG(WARNING) << "not supported type!";
@@ -137,7 +155,7 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
   }
 
   table = arrow::Table::Make(s, arrays, rowCount);
-  LOG(INFO) << "convert done";
+  LOG(DEBUG) << "convert done";
 
   return;
 }
@@ -220,18 +238,22 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   std::string random_table_name = table_name + util::random_string(10);
 
   const char* sqlPtr = env->GetStringUTFChars(sql, nullptr);
-  // std::string queryInfo = "execute relalg " + std::string(sqlPtr);
-  std::string queryInfo = std::string(sqlPtr);
+  std::string queryInfo = "execute relalg " + std::string(sqlPtr);
+  // std::string queryInfo = std::string(sqlPtr);/
 
   auto ret = util::replace(queryInfo, table_name, random_table_name);
   if (!ret) {
     LOG(FATAL) << "table name not match!";
   }
-  LOG(INFO) << "table " << table_name << "   random " << random_table_name;
+  LOG(DEBUG) << "table " << table_name << "   random " << random_table_name;
 
   (*pDbe)->importArrowTable(random_table_name, arrowTable);
 
+  LOG(DEBUG) << "import table done.";
+
   auto res = (*pDbe)->executeRA(queryInfo);
+
+  LOG(DEBUG) << "execute done.";
 
   int count = res->getRowCount();
 
@@ -253,6 +275,7 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   }
 
   rp->release();
+  LOG(DEBUG) << "return rows: " << count;
 
   return count;
 }
