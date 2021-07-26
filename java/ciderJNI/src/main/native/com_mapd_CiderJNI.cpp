@@ -68,7 +68,7 @@ std::pair<std::shared_ptr<arrow::Schema>, std::string> parse_to_schema(
     LOG(ERROR) << "invalid json for schema!";
   }
   table_name = d["Table"].GetString();
-  const rapidjson::Value& columns = d["columns"];
+  const rapidjson::Value& columns = d["Columns"];
   std::string schema;
   for (rapidjson::Value::ConstValueIterator v_iter = columns.Begin();
        v_iter != columns.End();
@@ -138,16 +138,17 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
 
     std::shared_ptr<arrow::Array> array;
     if (dataType == arrow::Type::INT32) {
-      array = std::make_shared<arrow::Int32Array>(rowCount, dataBuffer, nullBuffer);
+      array = std::make_shared<arrow::Int32Array>(rowCount, dataBuffer);
+      LOG(DEBUG1) << "convert result, data: " << array->ToString();
       for (int j = 0; j < rowCount; j++) {
         // LOG(INFO) << "data: " << *((int32_t*)ptr + j);
       }
     } else if (dataType == arrow::Type::INT64) {
-      array = std::make_shared<arrow::Int64Array>(rowCount, dataBuffer, nullBuffer);
+      array = std::make_shared<arrow::Int64Array>(rowCount, dataBuffer);
     } else if (dataType == arrow::Type::FLOAT) {
-      array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer, nullBuffer);
+      array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer);
     } else if (dataType == arrow::Type::DOUBLE) {
-      array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer, nullBuffer);
+      array = std::make_shared<arrow::FloatArray>(rowCount, dataBuffer);
     } else {
       LOG(WARNING) << "not supported type!";
     }
@@ -155,7 +156,7 @@ void convertToArrowTable(std::shared_ptr<arrow::Table>& table,
   }
 
   table = arrow::Table::Make(s, arrays, rowCount);
-  LOG(DEBUG) << "convert done";
+  LOG(DEBUG1) << "convert done " << table->ToString();
 
   return;
 }
@@ -239,23 +240,24 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
 
   const char* sqlPtr = env->GetStringUTFChars(sql, nullptr);
   std::string queryInfo = "execute relalg " + std::string(sqlPtr);
-  // std::string queryInfo = std::string(sqlPtr);/
+  // std::string queryInfo = "select a from " + table_name + " where c > 13;";
 
   auto ret = util::replace(queryInfo, table_name, random_table_name);
   if (!ret) {
     LOG(FATAL) << "table name not match!";
   }
-  LOG(DEBUG) << "table " << table_name << "   random " << random_table_name;
+  LOG(DEBUG1) << "table " << table_name << "   random " << random_table_name;
 
   (*pDbe)->importArrowTable(random_table_name, arrowTable);
 
-  LOG(DEBUG) << "import table done.";
+  LOG(DEBUG1) << "import table done.";
 
   auto res = (*pDbe)->executeRA(queryInfo);
 
-  LOG(DEBUG) << "execute done.";
+  LOG(DEBUG1) << "execute done.";
 
   int count = res->getRowCount();
+  LOG(DEBUG1) << "return rows: " << count;
 
   // converting result
   auto rp = std::make_shared<CiderPrestoResultProvider>();
@@ -263,19 +265,22 @@ JNIEXPORT jint JNICALL Java_com_mapd_CiderJNI_processBlocks(JNIEnv* env,
   std::vector<PrestoResult> result =
       std::any_cast<std::vector<PrestoResult>>(rp->convert());
   CHECK(resultValuesLen == result.size());
+  LOG(INFO) << "copy result: " << resultValuesLen;
   for (int i = 0; i < resultValuesLen; i++) {
     int8_t* valueSrc = result[i].valueBuffer;
     int8_t* valueDst = (int8_t*)resultValuesPtr[i];
     int valueBufferLength = result[i].valueBufferLength;
+    LOG(INFO) << "copy length: " << valueBufferLength;
     memcpy(valueDst, valueSrc, valueBufferLength);
-    int8_t* nullSrc = result[i].nullBuffer;
+    // int8_t* nullSrc = result[i].nullBuffer;
     int8_t* nullDst = (int8_t*)resultNullsPtr[i];
     int nullBufferLength = result[i].nullBufferLength;
-    memcpy(nullDst, nullSrc, nullBufferLength);
+    // memcpy(nullDst, nullSrc, nullBufferLength);
+    memset(nullDst, 0x01, nullBufferLength);
   }
 
   rp->release();
-  LOG(DEBUG) << "return rows: " << count;
+  LOG(DEBUG1) << "convert done : " << count;
 
   return count;
 }
