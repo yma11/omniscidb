@@ -24,5 +24,6 @@
     <module>mapd</module>
     <module>mapdcommon</module>
     <module>ciderJNI</module>
+    <module>plan</module>
   </modules>
 </project>
