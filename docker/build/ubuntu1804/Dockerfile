@@ -12,6 +12,12 @@ RUN echo '#!/bin/bash\n\
     chmod +x /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
+ENV http_proxy "http://child-prc.intel.com:913"
+ENV https_proxy "http://child-prc.intel.com:913"
+
+COPY ./proxy.conf /etc/apt/apt.conf.d/proxy.conf
+COPY ./.wgetrc /root/.wgetrc
+
 RUN apt-get update && \
     apt-get install -y \
       sudo \
@@ -26,3 +32,12 @@ RUN echo > /etc/ld.so.preload
 RUN curl -OJ https://dependencies.mapd.com/mapd-deps/mapd-deps-prebuilt.sh \
     && USER=root sudo bash ./mapd-deps-prebuilt.sh --enable \
     && rm mapd-deps-prebuilt.sh
+
+RUN mkdir -p /root/.m2/
+COPY ./settings.xml /root/.m2/settings.xml
+
+ENV CC /usr/bin/gcc
+ENV CXX /usr/bin/g++
+
+ADD ./entry.sh /entry.sh
+ENTRYPOINT /entry.sh
