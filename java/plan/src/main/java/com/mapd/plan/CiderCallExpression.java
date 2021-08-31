@@ -19,13 +19,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 
-public class CiderFilterCondition
+public class CiderCallExpression extends CiderExpression
 {
     private String op;
     private String type;
     private List<CiderExpression> expressions;
 
-    public CiderFilterCondition(String op, String type, List<CiderExpression> expressions)
+    public CiderCallExpression(String op, String type, List<CiderExpression> expressions)
     {
         this.op = op;
         this.type = type;
@@ -37,6 +37,7 @@ public class CiderFilterCondition
         return expressions;
     }
 
+    @Override
     public ObjectNode toJson(ObjectMapper objectMapper)
     {
         ObjectNode conditionNode = objectMapper.createObjectNode();
@@ -44,6 +45,7 @@ public class CiderFilterCondition
         ArrayNode operandsNode = objectMapper.createArrayNode();
         ObjectNode operandsFeilds = objectMapper.createObjectNode();
         ObjectNode operandsInput = objectMapper.createObjectNode();
+        /*
         for (CiderExpression e : expressions) {
             if (e instanceof CiderConstantExpression) {
                 e.toJson(operandsInput, operandsFeilds);
@@ -52,6 +54,7 @@ public class CiderFilterCondition
                 e.toJson(operandsInput, operandsFeilds);
             }
         }
+        */
         operandsNode.add(operandsInput);
         operandsNode.add(operandsFeilds);
 

@@ -13,6 +13,7 @@
  */
 package com.mapd.plan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.math.BigDecimal;
@@ -39,6 +40,11 @@ public class CiderConstantExpression
     }
 
     @Override
+    public ObjectNode toJson(ObjectMapper objectManager)
+    {
+        return null;
+    }
+
     public void toJson(ObjectNode operandsInput, ObjectNode operandsFeilds)
     {
         int dScale = 0;

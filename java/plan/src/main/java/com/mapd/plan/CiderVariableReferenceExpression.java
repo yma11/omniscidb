@@ -13,6 +13,7 @@
  */
 package com.mapd.plan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class CiderVariableReferenceExpression
@@ -20,6 +21,7 @@ public class CiderVariableReferenceExpression
 {
     private int columnIndex;
     private String targetType;
+    private String name;
 
     public CiderVariableReferenceExpression(int columnIndex, String targetType)
     {
@@ -27,13 +29,64 @@ public class CiderVariableReferenceExpression
         this.targetType = targetType;
     }
 
+    public CiderVariableReferenceExpression(String name, String targetType, int columnIndex)
+    {
+        this.name = name;
+        this.targetType = targetType;
+        this.columnIndex = columnIndex;
+    }
+
+    @Override
+    public ObjectNode toJson(ObjectMapper objectManager)
+    {
+        return null;
+    }
+
     public void toJson(ObjectNode operandsInput, ObjectNode operandsFeilds)
     {
         // column index
         operandsInput.put("input", columnIndex);
-        String dataType = matchType(targetType);
         operandsFeilds.put("target_type", matchType(targetType).toUpperCase());
         operandsFeilds.put("type_scale", getTypeScale(targetType));
         operandsFeilds.put("type_precision", getTypePrecision(targetType));
+    }
+
+    protected String matchType(String type)
+    {
+        switch (type) {
+            case "int":
+            case "integer":
+            case "Int":
+                return "Integer";
+            case "double":
+                return "decimal";
+        }
+        return type;
+    }
+
+    protected int getTypeScale(String type)
+    {
+        switch (type) {
+            case "int":
+            case "integer":
+            case "Int":
+                return 0;
+            case "double":
+                return 2;
+        }
+        return -1;
+    }
+
+    protected int getTypePrecision(String type)
+    {
+        switch (type) {
+            case "int":
+            case "integer":
+            case "Int":
+                return 10;
+            case "double":
+                return 5;
+        }
+        return -1;
     }
 }

@@ -26,7 +26,6 @@ public class CiderTableScanNode
     private String tableName;
     private String schemaName;
     private List<String> fieldNames;
-    private List<String> inputs = new ArrayList<>();
 
     public CiderTableScanNode(String schema, String tableName, List<String> fieldNames)
     {

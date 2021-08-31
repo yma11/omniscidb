@@ -18,19 +18,30 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import javafx.util.Pair;
 
+import java.util.HashMap;
 import java.util.List;
 
 public class CiderProjectNode
         extends CiderOperatorNode
 {
+    // TODO: remove fieldNames and exprs
     private List<String> fieldNames;
     private List<Pair<String, Integer>> exprs;
+    private HashMap<CiderVariableReferenceExpression, CiderExpression> assignments;
+    //column, based on TableScannode outputVariables(a, b, c)
 
+    // TODO: remove this constructor
     public CiderProjectNode(List<String> fieldNames, List<Pair<String, Integer>> exprs)
     {
         super("LogicalProject");
         this.fieldNames = fieldNames;
         this.exprs = exprs;
+    }
+
+    public CiderProjectNode(HashMap<CiderVariableReferenceExpression, CiderExpression> assignments)
+    {
+        super("LogicalProject");
+        this.assignments = assignments;
     }
 
     @Override

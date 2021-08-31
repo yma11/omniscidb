@@ -13,48 +13,10 @@
  */
 package com.mapd.plan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public abstract class CiderExpression
 {
-    public abstract void toJson(ObjectNode operandsInput, ObjectNode operandsFeilds);
-
-    protected String matchType(String type)
-    {
-        switch (type) {
-            case "int":
-            case "integer":
-            case "Int":
-                return "Integer";
-            case "double":
-                return "decimal";
-        }
-        return type;
-    }
-
-    protected int getTypeScale(String type)
-    {
-        switch (type) {
-            case "int":
-            case "integer":
-            case "Int":
-                return 0;
-            case "double":
-                return 2;
-        }
-        return -1;
-    }
-
-    protected int getTypePrecision(String type)
-    {
-        switch (type) {
-            case "int":
-            case "integer":
-            case "Int":
-                return 10;
-            case "double":
-                return 5;
-        }
-        return -1;
-    }
+    public abstract ObjectNode toJson(ObjectMapper objectManager);
 }

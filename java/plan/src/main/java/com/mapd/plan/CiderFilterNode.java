@@ -19,9 +19,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 public class CiderFilterNode
         extends CiderOperatorNode
 {
-    private CiderFilterCondition condition;
+    private CiderExpression condition;
 
-    public CiderFilterNode(CiderFilterCondition condition)
+    public CiderFilterNode(CiderExpression condition)
     {
         super("LogicalFilter");
         this.condition = condition;
@@ -33,7 +33,9 @@ public class CiderFilterNode
         ObjectNode objectNode = objectMapper.createObjectNode();
         objectNode.put("id", id);
         objectNode.put("relOp", "LogicalFilter");
-        objectNode.set("condition", condition.toJson(objectMapper));
+        if (condition instanceof CiderCallExpression)
+            objectNode.set("condition", condition.toJson(objectMapper));
+        // TODO: multi conditions using CiderSpecialFormCondition
         return objectNode;
     }
 }
